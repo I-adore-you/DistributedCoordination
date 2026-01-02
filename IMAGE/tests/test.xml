@@ -1,0 +1,38 @@
+<mxfile host="app.diagrams.net" modified="2026-01-01T00:00:00.000Z" agent="ChatGPT" version="24.8.3" etag="test_flowchart" type="device">
+  <diagram name="Page-1" id="test-diagram">
+    <mxGraphModel dx="800" dy="400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <!-- 这是根节点 -->
+        <mxCell id="0" />
+        
+        <!-- 这是画布的根节点 -->
+        <mxCell id="1" parent="0" />
+        
+        <!-- 开始节点 (圆角矩形) -->
+        <mxCell id="start" value="开始" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="300" y="100" width="120" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- 过程节点 (矩形) -->
+        <mxCell id="process" value="处理数据" style="whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" parent="1" vertex="1">
+          <mxGeometry x="300" y="200" width="120" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- 结束节点 (圆角矩形) -->
+        <mxCell id="end" value="结束" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" vertex="1">
+          <mxGeometry x="300" y="300" width="120" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- 从"开始"到"过程"的箭头 -->
+        <mxCell id="edge1" value="" style="endArrow=classic;html=1;rounded=0;" parent="1" source="start" target="process" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- 从"过程"到"结束"的箭头 -->
+        <mxCell id="edge2" value="" style="endArrow=classic;html=1;rounded=0;" parent="1" source="process" target="end" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

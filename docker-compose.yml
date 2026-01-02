@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  zk1:
+    image: zookeeper:3.7.0
+    container_name: zk1
+    restart: always
+    hostname: zk1
+    ports:
+      - "2181:2181"
+      - "8080:8080"
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr,conf,ruok
+      ZOO_CFG_EXTRA: "admin.serverPort=8080"
+    volumes:
+      - ./zk1/data:/data
+      - ./zk1/datalog:/datalog
+    networks:
+      zk-net:
+        ipv4_address: 192.168.150.11
+
+  zk2:
+    image: zookeeper:3.7.0
+    container_name: zk2
+    restart: always
+    hostname: zk2
+    ports:
+      - "2182:2181"
+      - "8081:8080"
+    environment:
+      ZOO_MY_ID: 2
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr,conf,ruok
+      ZOO_CFG_EXTRA: "admin.serverPort=8080"
+    volumes:
+      - ./zk2/data:/data
+      - ./zk2/datalog:/datalog
+    networks:
+      zk-net:
+        ipv4_address: 192.168.150.12
+
+  zk3:
+    image: zookeeper:3.7.0
+    container_name: zk3
+    restart: always
+    hostname: zk3
+    ports:
+      - "2183:2181"
+      - "8082:8080"
+    environment:
+      ZOO_MY_ID: 3
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr,conf,ruok
+      ZOO_CFG_EXTRA: "admin.serverPort=8080"
+    volumes:
+      - ./zk3/data:/data
+      - ./zk3/datalog:/datalog
+    networks:
+      zk-net:
+        ipv4_address: 192.168.150.13
+
+networks:
+  zk-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.150.0/24

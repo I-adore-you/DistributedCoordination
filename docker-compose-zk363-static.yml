@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  zk1:
+    image: zookeeper:3.6.3
+    container_name: zk1-3.6.3-static
+    restart: always
+    hostname: zk1
+    ports:
+      - "2181:2181"
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=zk1:2888:3888 server.2=zk2:2888:3888 server.3=zk3:2888:3888
+    volumes:
+      - ./zk363-static/zk1/data:/data
+      - ./zk363-static/zk1/datalog:/datalog
+    networks:
+      zk363-static-net:
+        ipv4_address: 192.168.161.11
+
+  zk2:
+    image: zookeeper:3.6.3
+    container_name: zk2-3.6.3-static
+    restart: always
+    hostname: zk2
+    ports:
+      - "2182:2181"
+    environment:
+      ZOO_MY_ID: 2
+      ZOO_SERVERS: server.1=zk1:2888:3888 server.2=zk2:2888:3888 server.3=zk3:2888:3888
+    volumes:
+      - ./zk363-static/zk2/data:/data
+      - ./zk363-static/zk2/datalog:/datalog
+    networks:
+      zk363-static-net:
+        ipv4_address: 192.168.161.12
+
+  zk3:
+    image: zookeeper:3.6.3
+    container_name: zk3-3.6.3-static
+    restart: always
+    hostname: zk3
+    ports:
+      - "2183:2181"
+    environment:
+      ZOO_MY_ID: 3
+      ZOO_SERVERS: server.1=zk1:2888:3888 server.2=zk2:2888:3888 server.3=zk3:2888:3888
+    volumes:
+      - ./zk363-static/zk3/data:/data
+      - ./zk363-static/zk3/datalog:/datalog
+    networks:
+      zk363-static-net:
+        ipv4_address: 192.168.161.13
+
+networks:
+  zk363-static-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.161.0/24

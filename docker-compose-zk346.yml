@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  zk1:
+    image: zookeeper:3.6.3
+    container_name: zk1-3.4.6
+    restart: always
+    hostname: zk1
+    ports:
+      - "2181:2181"
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_CFG_EXTRA: "clientPort=2181"
+    volumes:
+      - ./zk346/zk1/data:/data
+      - ./zk346/zk1/datalog:/datalog
+    networks:
+      zk346-net:
+        ipv4_address: 192.168.160.11
+
+  zk2:
+    image: zookeeper:3.6.3
+    container_name: zk2-3.4.6
+    restart: always
+    hostname: zk2
+    ports:
+      - "2182:2181"
+    environment:
+      ZOO_MY_ID: 2
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_CFG_EXTRA: "clientPort=2181"
+    volumes:
+      - ./zk346/zk2/data:/data
+      - ./zk346/zk2/datalog:/datalog
+    networks:
+      zk346-net:
+        ipv4_address: 192.168.160.12
+
+  zk3:
+    image: zookeeper:3.6.3
+    container_name: zk3-3.4.6
+    restart: always
+    hostname: zk3
+    ports:
+      - "2183:2181"
+    environment:
+      ZOO_MY_ID: 3
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_CFG_EXTRA: "clientPort=2181"
+    volumes:
+      - ./zk346/zk3/data:/data
+      - ./zk346/zk3/datalog:/datalog
+    networks:
+      zk346-net:
+        ipv4_address: 192.168.160.13
+
+networks:
+  zk346-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.160.0/24
+

@@ -1,0 +1,118 @@
+version: '3.8'
+
+services:
+  zk1:
+    image: zookeeper:3.7.0
+    container_name: zk1-3.7.0-dynamic
+    restart: always
+    hostname: zk1
+    ports:
+      - "2181:2181"
+      - "8080:8080"
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr,conf,ruok,reconfig
+      ZOO_CFG_EXTRA: "admin.serverPort=8080 reconfigEnabled=true dynamicConfigFile=/data/zoo.cfg.dynamic"
+    volumes:
+      - ./zk370-dynamic/zk1/data:/data
+      - ./zk370-dynamic/zk1/datalog:/datalog
+      - ./zk370-dynamic/zk1/conf:/conf
+    networks:
+      zk370-dynamic-net:
+        ipv4_address: 192.168.170.11
+    entrypoint: ["sh", "-c", 
+      "echo 'server.1=zk1:2888:3888:participant;2181' > /data/zoo.cfg.dynamic && 
+       echo 'server.2=zk2:2888:3888:participant;2181' >> /data/zoo.cfg.dynamic && 
+       echo 'server.3=zk3:2888:3888:participant;2181' >> /data/zoo.cfg.dynamic && 
+       /docker-entrypoint.sh zkServer.sh start-foreground"
+    ]
+
+  zk2:
+    image: zookeeper:3.7.0
+    container_name: zk2-3.7.0-dynamic
+    restart: always
+    hostname: zk2
+    ports:
+      - "2182:2181"
+      - "8081:8080"
+    environment:
+      ZOO_MY_ID: 2
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr,conf,ruok,reconfig
+      ZOO_CFG_EXTRA: "admin.serverPort=8080 reconfigEnabled=true dynamicConfigFile=/data/zoo.cfg.dynamic"
+    volumes:
+      - ./zk370-dynamic/zk2/data:/data
+      - ./zk370-dynamic/zk2/datalog:/datalog
+      - ./zk370-dynamic/zk2/conf:/conf
+    networks:
+      zk370-dynamic-net:
+        ipv4_address: 192.168.170.12
+    entrypoint: ["sh", "-c", 
+      "echo 'server.1=zk1:2888:3888:participant;2181' > /data/zoo.cfg.dynamic && 
+       echo 'server.2=zk2:2888:3888:participant;2181' >> /data/zoo.cfg.dynamic && 
+       echo 'server.3=zk3:2888:3888:participant;2181' >> /data/zoo.cfg.dynamic && 
+       /docker-entrypoint.sh zkServer.sh start-foreground"
+    ]
+
+  zk3:
+    image: zookeeper:3.7.0
+    container_name: zk3-3.7.0-dynamic
+    restart: always
+    hostname: zk3
+    ports:
+      - "2183:2181"
+      - "8082:8080"
+    environment:
+      ZOO_MY_ID: 3
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr,conf,ruok,reconfig
+      ZOO_CFG_EXTRA: "admin.serverPort=8080 reconfigEnabled=true dynamicConfigFile=/data/zoo.cfg.dynamic"
+    volumes:
+      - ./zk370-dynamic/zk3/data:/data
+      - ./zk370-dynamic/zk3/datalog:/datalog
+      - ./zk370-dynamic/zk3/conf:/conf
+    networks:
+      zk370-dynamic-net:
+        ipv4_address: 192.168.170.13
+    entrypoint: ["sh", "-c", 
+      "echo 'server.1=zk1:2888:3888:participant;2181' > /data/zoo.cfg.dynamic && 
+       echo 'server.2=zk2:2888:3888:participant;2181' >> /data/zoo.cfg.dynamic && 
+       echo 'server.3=zk3:2888:3888:participant;2181' >> /data/zoo.cfg.dynamic && 
+       /docker-entrypoint.sh zkServer.sh start-foreground"
+    ]
+
+  # 可选：用于演示动态添加的节点
+  zk4:
+    image: zookeeper:3.7.0
+    container_name: zk4-3.7.0-dynamic
+    restart: always
+    hostname: zk4
+    ports:
+      - "2184:2181"
+      - "8083:8080"
+    environment:
+      ZOO_MY_ID: 4
+      ZOO_SERVERS: server.1=zk1:2888:3888;2181
+      ZOO_4LW_COMMANDS_WHITELIST: mntr,conf,ruok,reconfig
+      ZOO_CFG_EXTRA: "admin.serverPort=8080 reconfigEnabled=true dynamicConfigFile=/data/zoo.cfg.dynamic"
+    volumes:
+      - ./zk370-dynamic/zk4/data:/data
+      - ./zk370-dynamic/zk4/datalog:/datalog
+      - ./zk370-dynamic/zk4/conf:/conf
+    networks:
+      zk370-dynamic-net:
+        ipv4_address: 192.168.170.14
+    entrypoint: ["sh", "-c", 
+      "echo 'server.1=zk1:2888:3888:participant;2181' > /data/zoo.cfg.dynamic && 
+       /docker-entrypoint.sh zkServer.sh start-foreground"
+    ]
+    profiles:
+      - optional
+
+networks:
+  zk370-dynamic-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.170.0/24
