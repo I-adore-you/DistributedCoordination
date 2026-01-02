@@ -216,18 +216,3 @@ docker exec -it zk1-3.7.0-dynamic zkCli.sh -server zk1:2181,zk2:2181,zk3:2181
 </dependency>
 ```
 
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 📄 许可证
-
-本项目仅用于学习目的。
-
-## 📧 联系方式
-
-如有问题或建议，欢迎通过 Issue 反馈。
-
----
-
-**注意**：本项目主要用于学习和实践 ZooKeeper，生产环境使用请参考官方文档和最佳实践。
