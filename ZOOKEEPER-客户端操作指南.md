@@ -332,7 +332,113 @@ delete /test 0  # 0 是版本号
 deleteall /parent
 ```
 
-### 3.6 常见错误和解决方案
+### 3.6 批量操作（Multi/Transaction）
+
+**注意**：批量操作功能仅在 ZooKeeper 3.5.0+ 版本中可用，且需要通过 Java API 使用，命令行客户端 `zkCli.sh` 不直接支持批量操作。
+
+#### 3.6.1 批量操作概述
+
+ZooKeeper 的 `multi` 操作允许在一个**事务**中执行多个操作，这些操作要么**全部成功**，要么**全部失败**（原子性）。
+
+**特点**：
+- ✅ **原子性**：所有操作作为一个事务执行
+- ✅ **性能优化**：减少网络往返次数（N次操作 → 1次网络请求）
+- ✅ **一致性**：保证操作的顺序性和一致性
+
+#### 3.6.2 批量操作的优势
+
+**性能对比**：
+
+| 操作方式 | 网络请求次数 | 原子性 | 性能 |
+|---------|------------|--------|------|
+| **逐个操作** | N次 | ❌ | 慢 |
+| **批量操作** | 1次 | ✅ | 快 |
+
+**示例场景**：
+- 批量创建节点：初始化时创建多个节点
+- 批量获取数据：服务发现时获取所有实例数据
+- 批量更新配置：同时更新多个配置项
+- 批量删除节点：清理多个节点
+
+#### 3.6.3 批量操作使用场景
+
+**场景1：批量创建服务实例**
+
+```java
+// 创建多个服务实例节点
+List<Op> ops = new ArrayList<>();
+ops.add(Op.create("/services/user-service/instances/pod-001", 
+        "10.244.1.1:8080".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, 
+        CreateMode.EPHEMERAL));
+ops.add(Op.create("/services/user-service/instances/pod-002", 
+        "10.244.1.2:8080".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, 
+        CreateMode.EPHEMERAL));
+ops.add(Op.create("/services/user-service/instances/pod-003", 
+        "10.244.1.3:8080".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, 
+        CreateMode.EPHEMERAL));
+
+zk.multi(ops);  // 一次网络请求完成所有创建操作
+```
+
+**场景2：批量获取服务实例数据**
+
+```java
+// 获取所有服务实例的详细信息
+List<String> instanceIds = zk.getChildren("/services/user-service/instances", null);
+
+List<Op> ops = new ArrayList<>();
+for (String id : instanceIds) {
+    ops.add(Op.getData("/services/user-service/instances/" + id, false));
+}
+
+List<OpResult> results = zk.multi(ops);  // 一次网络请求获取所有数据
+// 处理结果...
+```
+
+**场景3：批量更新配置（带版本检查）**
+
+```java
+// 同时更新多个配置项，使用版本号保证一致性
+List<Op> ops = new ArrayList<>();
+ops.add(Op.check("/config/app", 0));  // 检查版本号
+ops.add(Op.setData("/config/app", "new config".getBytes(), 0));
+ops.add(Op.check("/config/db", 1));
+ops.add(Op.setData("/config/db", "new db config".getBytes(), 1));
+
+zk.multi(ops);  // 如果版本号不匹配，整个事务回滚
+```
+
+#### 3.6.4 批量操作注意事项
+
+1. **版本要求**：需要 ZooKeeper 3.5.0+ 版本
+2. **原子性保证**：所有操作要么全部成功，要么全部失败
+3. **顺序执行**：操作按照添加的顺序执行
+4. **错误处理**：如果任何一个操作失败，整个事务回滚
+5. **命令行限制**：`zkCli.sh` 不直接支持批量操作，需要通过 Java API
+
+#### 3.6.5 批量操作 vs 逐个操作
+
+**逐个操作示例**：
+```java
+// 需要 N 次网络请求
+zk.create("/node1", "data1".getBytes(), ...);  // 请求1
+zk.create("/node2", "data2".getBytes(), ...);  // 请求2
+zk.create("/node3", "data3".getBytes(), ...);  // 请求3
+// 如果第2个操作失败，第1个已经成功，数据不一致
+```
+
+**批量操作示例**：
+```java
+// 只需要 1 次网络请求
+List<Op> ops = Arrays.asList(
+    Op.create("/node1", "data1".getBytes(), ...),
+    Op.create("/node2", "data2".getBytes(), ...),
+    Op.create("/node3", "data3".getBytes(), ...)
+);
+zk.multi(ops);  // 如果第2个操作失败，所有操作都回滚，保证一致性
+```
+
+### 3.7 常见错误和解决方案
 
 #### 错误1：Node does not exist（节点不存在）
 
@@ -397,7 +503,7 @@ delete /parent
 deleteall /parent
 ```
 
-### 3.7 历史记录和命令补全
+### 3.8 历史记录和命令补全
 
 ```bash
 # 查看历史命令
@@ -956,6 +1062,203 @@ zk.create("/async-node", "data".getBytes(),
                 }
             }
         }, "context");
+```
+
+### 8.4 批量操作（Multi/Transaction）
+
+**注意**：批量操作功能仅在 ZooKeeper 3.5.0+ 版本中可用。
+
+#### 8.4.1 批量操作概述
+
+ZooKeeper 的 `multi` 操作允许在一个事务中执行多个操作，这些操作要么**全部成功**，要么**全部失败**（原子性）。
+
+**特点**：
+- ✅ **原子性**：所有操作作为一个事务执行
+- ✅ **性能优化**：减少网络往返次数
+- ✅ **一致性**：保证操作的顺序性
+
+#### 8.4.2 批量操作支持的操作类型
+
+- `Op.create()`: 创建节点
+- `Op.delete()`: 删除节点
+- `Op.setData()`: 修改节点数据
+- `Op.check()`: 检查节点版本（用于乐观锁）
+- `Op.getData()`: 获取节点数据（只读操作）
+
+#### 8.4.3 Java API 批量操作示例
+
+**示例1：批量创建节点**
+
+```java
+import org.apache.zookeeper.*;
+import org.apache.zookeeper.data.ACL;
+import java.util.*;
+
+// 批量创建多个节点
+List<Op> ops = new ArrayList<>();
+ops.add(Op.create("/batch/node1", "data1".getBytes(), 
+        ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+ops.add(Op.create("/batch/node2", "data2".getBytes(), 
+        ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+ops.add(Op.create("/batch/node3", "data3".getBytes(), 
+        ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+
+try {
+    // 批量执行，要么全部成功，要么全部失败
+    List<OpResult> results = zk.multi(ops);
+    
+    // 处理结果
+    for (OpResult result : results) {
+        if (result instanceof OpResult.CreateResult) {
+            OpResult.CreateResult createResult = (OpResult.CreateResult) result;
+            System.out.println("创建成功: " + createResult.getPath());
+        }
+    }
+} catch (KeeperException e) {
+    // 如果任何一个操作失败，整个事务回滚
+    System.err.println("批量操作失败: " + e.getMessage());
+}
+```
+
+**示例2：批量获取节点数据**
+
+```java
+// 批量获取多个节点的数据
+List<String> paths = Arrays.asList(
+    "/x-system/services/x-user-service/instances/pod-001",
+    "/x-system/services/x-user-service/instances/pod-002",
+    "/x-system/services/x-user-service/instances/pod-003"
+);
+
+List<Op> ops = new ArrayList<>();
+for (String path : paths) {
+    ops.add(Op.getData(path, false));
+}
+
+try {
+    List<OpResult> results = zk.multi(ops);
+    
+    List<String> instanceData = new ArrayList<>();
+    for (OpResult result : results) {
+        if (result instanceof OpResult.GetDataResult) {
+            OpResult.GetDataResult getDataResult = (OpResult.GetDataResult) result;
+            byte[] data = getDataResult.getData();
+            instanceData.add(new String(data));
+        }
+    }
+    
+    System.out.println("批量获取成功，共 " + instanceData.size() + " 个实例");
+} catch (KeeperException e) {
+    System.err.println("批量获取失败: " + e.getMessage());
+}
+```
+
+**示例3：批量更新节点（带版本检查）**
+
+```java
+// 批量更新多个节点，使用版本号保证一致性
+List<Op> ops = new ArrayList<>();
+
+// 先检查版本号（乐观锁）
+ops.add(Op.check("/config/app", 0));  // 检查版本号是否为0
+ops.add(Op.setData("/config/app", "new config".getBytes(), 0));
+
+ops.add(Op.check("/config/db", 1));   // 检查版本号是否为1
+ops.add(Op.setData("/config/db", "new db config".getBytes(), 1));
+
+try {
+    List<OpResult> results = zk.multi(ops);
+    System.out.println("批量更新成功");
+} catch (KeeperException.BadVersionException e) {
+    // 版本号不匹配，整个事务回滚
+    System.err.println("版本号不匹配，更新失败");
+}
+```
+
+**示例4：批量删除节点**
+
+```java
+// 批量删除多个节点
+List<Op> ops = new ArrayList<>();
+ops.add(Op.delete("/batch/node1", -1));
+ops.add(Op.delete("/batch/node2", -1));
+ops.add(Op.delete("/batch/node3", -1));
+
+try {
+    List<OpResult> results = zk.multi(ops);
+    System.out.println("批量删除成功");
+} catch (KeeperException e) {
+    System.err.println("批量删除失败: " + e.getMessage());
+}
+```
+
+**示例5：混合操作（创建、更新、删除）**
+
+```java
+// 在一个事务中执行不同类型的操作
+List<Op> ops = new ArrayList<>();
+
+// 创建新节点
+ops.add(Op.create("/batch/new-node", "new data".getBytes(), 
+        ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+
+// 更新现有节点
+ops.add(Op.setData("/batch/existing-node", "updated data".getBytes(), -1));
+
+// 删除节点
+ops.add(Op.delete("/batch/old-node", -1));
+
+try {
+    List<OpResult> results = zk.multi(ops);
+    System.out.println("混合操作成功");
+} catch (KeeperException e) {
+    // 如果任何一个操作失败，所有操作都会回滚
+    System.err.println("混合操作失败: " + e.getMessage());
+}
+```
+
+#### 8.4.4 批量操作的优势
+
+| 特性 | 逐个操作 | 批量操作 |
+|------|---------|---------|
+| **网络请求** | N次 | 1次 |
+| **原子性** | ❌ | ✅ |
+| **性能** | 慢 | 快 |
+| **一致性** | 可能不一致 | 保证一致 |
+
+#### 8.4.5 批量操作注意事项
+
+1. **版本要求**：需要 ZooKeeper 3.5.0+ 版本
+2. **原子性**：所有操作要么全部成功，要么全部失败
+3. **顺序性**：操作按照添加的顺序执行
+4. **错误处理**：如果任何一个操作失败，整个事务回滚
+5. **性能**：批量操作可以显著减少网络往返次数
+
+#### 8.4.6 批量操作最佳实践
+
+1. **批量创建**：初始化时批量创建多个节点
+2. **批量获取**：服务发现时批量获取所有实例数据
+3. **批量更新**：配置变更时批量更新多个配置项
+4. **版本检查**：使用 `Op.check()` 实现乐观锁
+
+**示例：服务发现批量获取优化**
+
+```java
+// 优化前：逐个获取（N+1次网络请求）
+List<String> instanceIds = zk.getChildren("/services/x-user-service/instances", null);
+for (String id : instanceIds) {
+    byte[] data = zk.getData("/services/x-user-service/instances/" + id, false, null);
+    // 处理数据
+}
+
+// 优化后：批量获取（2次网络请求）
+List<String> instanceIds = zk.getChildren("/services/x-user-service/instances", null);
+List<Op> ops = new ArrayList<>();
+for (String id : instanceIds) {
+    ops.add(Op.getData("/services/x-user-service/instances/" + id, false));
+}
+List<OpResult> results = zk.multi(ops);
+// 处理结果
 ```
 
 ---
