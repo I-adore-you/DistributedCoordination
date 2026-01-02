@@ -562,7 +562,245 @@ get /config/app
 
 ## 5. Watch 机制
 
-### 5.1 Watch 类型
+### 5.1 Watch 机制实现原理
+
+#### 5.1.1 Watch 机制概述
+
+ZooKeeper 的 Watch 机制是一种**事件通知机制**，允许客户端在节点发生变化时收到通知。
+
+**核心特点**：
+- ✅ **基于会话（Session）**：Watch 与客户端会话绑定
+- ✅ **长连接**：客户端与服务器保持长连接
+- ✅ **推拉结合**：服务器推送事件，客户端拉取数据
+- ✅ **一次性**：Watch 触发后需要重新注册
+
+#### 5.1.2 Watch 机制的实现方式
+
+**1. 连接机制**
+
+ZooKeeper 使用**长连接（Long Connection）**实现 Watch：
+
+```
+客户端                    ZooKeeper 服务器
+  |                            |
+  |---- TCP 长连接建立 ------>|
+  |                            |
+  |<--- 会话ID (Session ID) ---|
+  |                            |
+  |---- 心跳保持连接 -------->|
+  |<--- 心跳响应 -------------|
+  |                            |
+  |---- 注册 Watch ---------->|
+  |                            |
+  |<--- 事件通知 (Push) -------|
+  |                            |
+```
+
+**关键点**：
+- ✅ **TCP 长连接**：客户端与服务器建立 TCP 长连接
+- ✅ **会话机制**：每个连接对应一个会话（Session）
+- ✅ **心跳保活**：客户端定期发送心跳保持连接
+- ✅ **事件推送**：服务器通过同一连接推送事件
+
+**2. Watch 存储机制**
+
+```
+ZooKeeper 服务器端存储结构：
+
+节点: /test
+├── 数据: "data"
+├── Stat: {...}
+└── Watchers: [
+    ├── SessionId: 0x100000488b80001,  WatcherType: NodeDataChanged
+    ├── SessionId: 0x100000488b80002,  WatcherType: NodeDeleted
+    └── SessionId: 0x100000488b80003,  WatcherType: NodeChildrenChanged
+]
+```
+
+**Watch 存储位置**：
+- 服务器端：Watch 存储在**内存**中，与节点和会话关联
+- 客户端端：Watch 存储在**客户端**，用于回调处理
+
+**3. Watch 通知流程**
+
+```
+步骤1：客户端注册 Watch
+客户端 ---- get /test watch ----> 服务器
+服务器：在 /test 节点上注册 Watch（关联 SessionId）
+
+步骤2：另一个客户端修改节点
+客户端2 ---- set /test "new" ----> 服务器
+服务器：检测到 /test 节点数据变化
+
+步骤3：服务器触发 Watch
+服务器：查找 /test 节点的所有 Watchers
+服务器：通过 SessionId 找到对应的客户端连接
+服务器 ---- WatchEvent (NodeDataChanged) ----> 客户端
+
+步骤4：客户端处理事件
+客户端：收到 WatchEvent
+客户端：触发 Watcher.process() 回调
+客户端：重新获取数据并重新注册 Watch
+```
+
+**4. 心跳机制**
+
+```
+客户端心跳流程：
+
+客户端                    ZooKeeper 服务器
+  |                            |
+  |---- PING (心跳) -------->|
+  |<--- PONG (响应) ---------|
+  |                            |
+  |---- PING (心跳) -------->|
+  |<--- PONG (响应) ---------|
+  |                            |
+  |---- PING (心跳) -------->|
+  |<--- PONG (响应) ---------|
+```
+
+**心跳参数**：
+- **心跳间隔**：`tickTime`（默认 2 秒）
+- **会话超时**：`sessionTimeout`（默认 30 秒）
+- **心跳超时**：如果 `sessionTimeout` 时间内没有收到心跳，会话过期
+
+**5. Watch 事件推送机制**
+
+**推拉结合模式**：
+
+```
+1. 推送阶段（Push）：
+   服务器检测到节点变化
+   → 立即通过长连接推送 WatchEvent 给客户端
+   → 只推送事件类型和路径，不推送数据
+
+2. 拉取阶段（Pull）：
+   客户端收到 WatchEvent
+   → 客户端主动调用 getData() 拉取最新数据
+   → 重新注册 Watch
+```
+
+**为什么是推拉结合？**
+- ✅ **推送**：快速通知客户端有变化
+- ✅ **拉取**：客户端按需获取数据，避免数据量大时的问题
+- ✅ **灵活性**：客户端可以选择是否获取数据
+
+#### 5.1.3 Watch 机制的底层实现
+
+**1. 网络层**
+
+```java
+// ZooKeeper 客户端网络层
+ClientCnxn {
+    SendThread sendThread;      // 发送线程（心跳、请求）
+    EventThread eventThread;    // 事件处理线程（Watch事件）
+    
+    // 长连接
+    SocketChannel socketChannel;
+    
+    // 心跳机制
+    void sendPing() {
+        // 发送心跳包
+    }
+}
+```
+
+**2. 会话层**
+
+```java
+// 会话管理
+Session {
+    long sessionId;              // 会话ID
+    long timeout;                // 超时时间
+    long lastPingTime;           // 最后心跳时间
+    List<Watcher> watchers;     // 该会话的所有 Watcher
+}
+```
+
+**3. Watch 存储**
+
+```java
+// 服务器端 Watch 存储
+DataTree {
+    Map<String, DataNode> nodes;  // 节点数据
+    
+    // Watch 管理器
+    WatchManager watchManager;
+    
+    void setData(String path, byte[] data) {
+        // 修改数据
+        DataNode node = nodes.get(path);
+        node.setData(data);
+        
+        // 触发 Watch
+        watchManager.triggerWatch(path, EventType.NodeDataChanged);
+    }
+}
+```
+
+#### 5.1.4 Watch 机制的关键特性
+
+**1. 一次性（One-time）**
+
+```
+客户端注册 Watch
+  ↓
+事件触发
+  ↓
+Watch 被移除（一次性）
+  ↓
+需要重新注册才能继续监听
+```
+
+**原因**：
+- 避免 Watch 爆炸（大量事件堆积）
+- 客户端可以选择是否继续监听
+- 减少服务器端 Watch 存储压力
+
+**2. 顺序性（Ordered）**
+
+```
+事件1: NodeCreated
+事件2: NodeDataChanged
+事件3: NodeDeleted
+
+→ 事件按顺序到达客户端
+```
+
+**3. 可靠性（Reliability）**
+
+```
+场景1：客户端正常
+  → Watch 事件正常推送
+
+场景2：客户端网络断开
+  → 服务器检测到会话过期
+  → Watch 自动清理
+
+场景3：客户端重连
+  → 需要重新注册 Watch
+```
+
+#### 5.1.5 Watch 机制的性能考虑
+
+**1. Watch 数量限制**
+
+- 服务器端：Watch 存储在内存中，数量有限
+- 客户端：Watch 回调可能阻塞，需要异步处理
+
+**2. 网络开销**
+
+- 心跳：每 2 秒一次，开销小
+- 事件推送：只在节点变化时推送，开销小
+- 长连接：保持连接的开销相对较小
+
+**3. 内存消耗**
+
+- 服务器端：每个 Watch 占用少量内存
+- 客户端：Watch 回调对象占用内存
+
+### 5.2 Watch 类型
 
 ZooKeeper 的 Watch 是一次性的，触发后需要重新注册。
 
@@ -595,7 +833,260 @@ create /parent/child "data"
 - `NodeDataChanged`: 节点数据被修改
 - `NodeChildrenChanged`: 子节点列表发生变化
 
-### 5.3 Java API 中使用 Watch
+### 5.3 Watch 机制的底层实现细节
+
+#### 5.3.1 连接架构
+
+**ZooKeeper 客户端连接架构**：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    ZooKeeper 客户端                      │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  ZooKeeper 对象                                    │  │
+│  │  ┌────────────────────────────────────────────┐ │  │
+│  │  │  ClientCnxn (连接管理器)                    │ │  │
+│  │  │  ├── SendThread (发送线程)                 │ │  │
+│  │  │  │   └── 心跳、请求发送                      │ │  │
+│  │  │  ├── EventThread (事件线程)                 │ │  │
+│  │  │  │   └── Watch 事件处理                      │ │  │
+│  │  │  └── SocketChannel (TCP 长连接)              │ │  │
+│  │  └────────────────────────────────────────────┘ │  │
+│  └──────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                    │ TCP 长连接
+                    │ 会话ID (Session ID)
+                    │ 心跳 (PING/PONG)
+                    │ Watch 事件推送
+                    ▼
+┌─────────────────────────────────────────────────────────┐
+│              ZooKeeper 服务器 (Leader/Follower)         │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  SessionTracker (会话跟踪器)                     │  │
+│  │  └── 管理所有客户端会话                           │  │
+│  │                                                   │  │
+│  │  WatchManager (Watch 管理器)                     │  │
+│  │  └── 存储和管理所有 Watch                         │  │
+│  │                                                   │  │
+│  │  DataTree (数据树)                                │  │
+│  │  └── 节点数据 + Watch 关联                        │  │
+│  └──────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 5.3.2 长连接机制详解
+
+**1. TCP 长连接建立**
+
+```java
+// 客户端连接 ZooKeeper
+ZooKeeper zk = new ZooKeeper("server1:2181,server2:2181", 3000, watcher);
+
+// 底层实现：
+// 1. 建立 TCP 连接（SocketChannel）
+// 2. 发送连接请求
+// 3. 服务器返回会话ID (Session ID)
+// 4. 连接保持打开状态（长连接）
+```
+
+**连接流程**：
+```
+客户端                          ZooKeeper 服务器
+  |                                  |
+  |---- TCP 连接请求 -------------->|
+  |                                  |
+  |<--- 会话ID (Session ID) --------|
+  |     (例如: 0x100000488b80001)   |
+  |                                  |
+  |---- 心跳 (PING) ---------------->|
+  |<--- 心跳响应 (PONG) -------------|
+  |                                  |
+  |---- 心跳 (PING) ---------------->|
+  |<--- 心跳响应 (PONG) -------------|
+  |                                  |
+  |---- 注册 Watch ---------------->|
+  |                                  |
+  |<--- Watch 事件 (Push) -----------|
+```
+
+**2. 心跳机制（Keep-Alive）**
+
+```java
+// 心跳参数
+tickTime = 2000ms          // 心跳间隔（默认2秒）
+sessionTimeout = 30000ms  // 会话超时（默认30秒）
+
+// 心跳逻辑
+while (连接活跃) {
+    发送 PING 包
+    等待 PONG 响应
+    如果 sessionTimeout 内没有收到响应 → 会话过期
+}
+```
+
+**心跳作用**：
+- ✅ **保持连接活跃**：防止连接被防火墙或 NAT 设备关闭
+- ✅ **检测连接状态**：及时发现网络故障
+- ✅ **会话保活**：防止会话过期
+
+**3. Watch 存储机制**
+
+**服务器端存储结构**：
+
+```java
+// Watch 存储在服务器内存中
+WatchManager {
+    // 按路径存储 Watch
+    Map<String, Set<Watcher>> pathWatchers;
+    
+    // 按会话存储 Watch
+    Map<Long, Set<Watcher>> sessionWatchers;
+}
+
+// 节点变化时触发 Watch
+void setData(String path, byte[] data) {
+    // 1. 更新节点数据
+    DataNode node = dataTree.getNode(path);
+    node.setData(data);
+    
+    // 2. 查找该节点的所有 Watch
+    Set<Watcher> watchers = watchManager.getWatchers(path);
+    
+    // 3. 通过会话ID找到对应的客户端连接
+    for (Watcher watcher : watchers) {
+        long sessionId = watcher.getSessionId();
+        Session session = sessionTracker.getSession(sessionId);
+        
+        // 4. 通过长连接推送事件
+        session.sendWatchEvent(new WatchedEvent(
+            EventType.NodeDataChanged, 
+            path
+        ));
+    }
+    
+    // 5. 移除 Watch（一次性）
+    watchManager.removeWatchers(path);
+}
+```
+
+**4. Watch 事件推送流程**
+
+```
+步骤1：节点变化
+客户端2 ---- set /test "new" ----> 服务器
+服务器：检测到 /test 节点数据变化
+
+步骤2：查找 Watch
+服务器：在 WatchManager 中查找 /test 的所有 Watch
+找到：SessionId=0x100000488b80001, WatcherType=NodeDataChanged
+
+步骤3：推送事件
+服务器：通过 SessionId 找到对应的 TCP 连接
+服务器 ---- WatchedEvent (NodeDataChanged, /test) ----> 客户端1
+
+步骤4：客户端处理
+客户端1：EventThread 收到事件
+客户端1：调用 Watcher.process(WatchedEvent)
+客户端1：重新获取数据（拉取）
+```
+
+**5. 推拉结合模式**
+
+**为什么是推拉结合？**
+
+```
+推送阶段（Push）：
+  服务器 → 客户端：推送事件通知
+  - 只推送事件类型和路径
+  - 不推送数据（避免数据量大）
+  - 延迟低，响应快
+
+拉取阶段（Pull）：
+  客户端 → 服务器：主动拉取数据
+  - 客户端收到事件后，主动调用 getData()
+  - 按需获取数据
+  - 灵活控制
+```
+
+**优势**：
+- ✅ **快速响应**：事件立即推送
+- ✅ **减少网络开销**：只推送事件，不推送数据
+- ✅ **灵活性**：客户端可以选择是否获取数据
+
+#### 5.3.3 Watch 机制的线程模型
+
+**客户端线程模型**：
+
+```java
+ZooKeeper 客户端
+├── SendThread (发送线程)
+│   ├── 发送心跳 (PING)
+│   ├── 发送请求 (getData, create, setData)
+│   └── 接收响应
+│
+└── EventThread (事件线程)
+    ├── 接收 Watch 事件
+    ├── 调用 Watcher.process()
+    └── 异步处理，不阻塞业务线程
+```
+
+**关键点**：
+- ✅ **SendThread**：处理所有网络 I/O（心跳、请求、响应）
+- ✅ **EventThread**：专门处理 Watch 事件，异步执行
+- ✅ **非阻塞**：Watch 回调在独立线程中执行，不阻塞业务逻辑
+
+#### 5.3.4 Watch 机制的可靠性保证
+
+**1. 会话机制**
+
+```java
+// Watch 与会话绑定
+Watch {
+    long sessionId;        // 关联的会话ID
+    String path;          // 监听的路径
+    WatcherType type;     // Watch 类型
+}
+
+// 会话过期时，自动清理 Watch
+void onSessionExpired(long sessionId) {
+    // 清理该会话的所有 Watch
+    watchManager.removeWatchersBySession(sessionId);
+}
+```
+
+**2. 连接重连**
+
+```
+场景：客户端网络断开后重连
+
+步骤1：网络断开
+客户端 ←-- 网络断开 --→ 服务器
+服务器：检测到会话过期，清理 Watch
+
+步骤2：客户端重连
+客户端 ---- 重连请求 ----> 服务器
+服务器：创建新会话，分配新 SessionId
+
+步骤3：重新注册 Watch
+客户端：需要重新注册所有 Watch
+（因为旧会话的 Watch 已被清理）
+```
+
+**3. Watch 丢失处理**
+
+```
+可能丢失 Watch 的情况：
+1. 网络抖动：短暂断开，Watch 可能丢失
+2. 服务器重启：Watch 存储在内存中，重启后丢失
+3. 会话过期：Watch 随会话一起清理
+
+解决方案：
+- Watch 是一次性的，需要重新注册
+- 客户端应该实现 Watch 重注册逻辑
+- 使用默认 Watcher 可以自动重注册
+```
+
+### 5.4 Java API 中使用 Watch
 
 ```java
 // 方式1：使用 Watcher 接口
@@ -604,11 +1095,18 @@ zk.getData("/test", new Watcher() {
     public void process(WatchedEvent event) {
         System.out.println("事件类型: " + event.getType());
         System.out.println("事件路径: " + event.getPath());
+        // 注意：Watch 是一次性的，需要重新注册
+        try {
+            zk.getData("/test", this, null);  // 重新注册
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }, null);
 
 // 方式2：使用 boolean 参数（使用默认 Watcher）
 zk.getData("/test", true, null);
+// true 表示使用创建 ZooKeeper 对象时传入的默认 Watcher
 
 // 方式3：使用异步回调
 zk.getData("/test", true, new AsyncCallback.DataCallback() {
@@ -618,6 +1116,35 @@ zk.getData("/test", true, new AsyncCallback.DataCallback() {
     }
 }, null);
 ```
+
+### 5.5 Watch 机制的性能和限制
+
+#### 5.5.1 性能特点
+
+**优势**：
+- ✅ **低延迟**：事件推送延迟低（毫秒级）
+- ✅ **高效**：基于长连接，无需轮询
+- ✅ **异步**：Watch 回调在独立线程执行
+
+**限制**：
+- ⚠️ **内存消耗**：Watch 存储在服务器内存中
+- ⚠️ **数量限制**：大量 Watch 会消耗内存
+- ⚠️ **一次性**：需要重新注册，增加复杂度
+
+#### 5.5.2 Watch 数量管理
+
+**服务器端限制**：
+```java
+// ZooKeeper 配置
+maxClientCnxns=60  // 每个客户端最大连接数
+// Watch 数量没有硬性限制，但受内存限制
+```
+
+**最佳实践**：
+- ✅ 合理使用 Watch，避免过度监听
+- ✅ Watch 回调中避免耗时操作
+- ✅ 及时重新注册 Watch
+- ✅ 使用异步 Watch 处理
 
 ---
 

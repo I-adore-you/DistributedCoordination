@@ -5,7 +5,9 @@
 
     <modelVersion>4.0.0</modelVersion>
 
+    <groupId>com.msb</groupId>
     <artifactId>bigdata-zookeeper</artifactId>
+    <version>1.0.0</version>
 
 
     <dependencies>
@@ -13,6 +15,11 @@
             <groupId>org.apache.zookeeper</groupId>
             <artifactId>zookeeper</artifactId>
             <version>3.4.6</version>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
         </dependency>
     </dependencies>
 </project>
