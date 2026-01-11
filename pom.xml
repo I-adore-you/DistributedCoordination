@@ -21,5 +21,17 @@
             <artifactId>junit</artifactId>
             <version>4.13.2</version>
         </dependency>
+        <!-- Curator Framework -->
+        <dependency>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-framework</artifactId>
+            <version>4.3.0</version>
+        </dependency>
+        <!-- Curator Recipes (包含分布式锁、领导者选举等) -->
+        <dependency>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-recipes</artifactId>
+            <version>4.3.0</version>
+        </dependency>
     </dependencies>
 </project>
